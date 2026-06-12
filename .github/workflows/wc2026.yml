@@ -1,20 +1,51 @@
 name: WC 2026 Notifier
+
 on:
   schedule:
-    - cron: '0 */3 * * *'   # tiap 3 jam (8x/hari, hemat quota)
-  workflow_dispatch:          # trigger manual dari GitHub
+    # Tiap 5 menit (minimum GitHub Actions)
+    - cron: '*/5 * * * *'
+    # Jadwal hari ini — tiap pagi jam 7 WIB (00:00 UTC)
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Mode: --auto | --schedule'
+        default: '--auto'
+
+permissions:
+  contents: write   # buat commit state.json balik ke repo
 
 jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
       - run: pip install requests python-dotenv
-      - run: python wc2026_notifier.py --all
+
+      - name: Run notifier
+        run: |
+          MODE="${{ github.event.inputs.mode || '--auto' }}"
+          # Override ke --schedule kalau ini run jam 00:00 UTC (pagi WIB)
+          MINUTE=$(date -u +%M)
+          HOUR=$(date -u +%H)
+          if [ "$HOUR" = "00" ] && [ "$MINUTE" = "00" ]; then
+            MODE="--schedule"
+          fi
+          python wc2026_notifier.py $MODE
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+
+      - name: Save state back to repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add state.json
+          git diff --staged --quiet || git commit -m "chore: update match state [skip ci]"
+          git push
+        # [skip ci] biar ga trigger workflow lagi pas push
