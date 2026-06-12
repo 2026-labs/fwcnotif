@@ -262,21 +262,20 @@ def main():
         # ── Pre-match: 60 min sebelum KO ─────────────────────────────────────
         if not ms["prematch"] and m["state"] == "pre" and m["ko_dt"]:
             diff_min = (m["ko_dt"] - now).total_seconds() / 60
-            if 0 <= diff_min <= 65:
+            if 0 <= diff_min <= 725:  # ~12 jam sebelum KO
                 send(notif_prematch(m))
                 ms["prematch"] = True
 
         # ── Half Time ─────────────────────────────────────────────────────────
-        if not ms["ht"] and m["state"] == "in" and m["period"] == 2:
-            if "STATUS_HALFTIME" in m["type_name"] or "Half Time" in m["detail"]:
-                send(notif_ht(m))
-                ms["ht"] = True
+        if not ms["ht"] and "STATUS_HALFTIME" in m["type_name"]:
+            send(notif_ht(m))
+            ms["ht"] = True
 
         # ── Extra Time Half Time ──────────────────────────────────────────────
-        if not ms["et_ht"] and m["state"] == "in" and m["period"] == 4:
-            if "HALFTIME" in m["type_name"] or "Half" in m["detail"]:
-                send(notif_et_ht(m))
-                ms["et_ht"] = True
+        # ESPN: STATUS_HALFTIME di period 3/4 = ET halftime
+        if not ms["et_ht"] and not ms["ht"] is False and "STATUS_HALFTIME" in m["type_name"] and m["period"] >= 3:
+            send(notif_et_ht(m))
+            ms["et_ht"] = True
 
         # ── Full Time (90 min, no ET) ─────────────────────────────────────────
         if not ms["ft"] and m["state"] == "post" and m["period"] <= 2:
