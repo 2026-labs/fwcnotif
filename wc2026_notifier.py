@@ -1,149 +1,300 @@
 #!/usr/bin/env python3
 """
-⚽ WC 2026 Telegram Notifier
-Source: openfootball GitHub JSON (free, no API key)
+⚽ WC 2026 Notifier — ESPN + state machine
+Notif: pre-match → HT → FT → (AET) → (PEN)
+State: state.json di repo (commit back tiap run)
 
-Usage:
-  python wc2026_notifier.py           # last5 + jadwal
-  python wc2026_notifier.py --last5
-  python wc2026_notifier.py --next5
-  python wc2026_notifier.py --today
+Data source: ESPN unofficial API (free, no key, live)
 """
 
-import os, sys, requests
+import os, sys, json, requests
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT  = os.getenv("TELEGRAM_CHAT_ID")
-WIB            = timezone(timedelta(hours=7))
-DATA_URL       = "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json"
+
+ESPN_URL   = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard"
+STATE_FILE = Path("state.json")
+UTC        = timezone.utc
+WIB        = timezone(timedelta(hours=7))
+HEADERS    = {"User-Agent": "Mozilla/5.0 (compatible; WC2026Bot/1.0)"}
 
 FLAGS = {
-    "Argentina":"🇦🇷","Brazil":"🇧🇷","France":"🇫🇷","Germany":"🇩🇪",
+    "Mexico":"🇲🇽","South Africa":"🇿🇦","South Korea":"🇰🇷","Czech Republic":"🇨🇿",
+    "Czechia":"🇨🇿","Argentina":"🇦🇷","Brazil":"🇧🇷","France":"🇫🇷","Germany":"🇩🇪",
     "Spain":"🇪🇸","Portugal":"🇵🇹","England":"🏴󠁧󠁢󠁥󠁮󠁧󠁿","Italy":"🇮🇹",
     "Netherlands":"🇳🇱","Belgium":"🇧🇪","Croatia":"🇭🇷","Morocco":"🇲🇦",
-    "Mexico":"🇲🇽","USA":"🇺🇸","United States":"🇺🇸","Canada":"🇨🇦",
-    "Japan":"🇯🇵","South Korea":"🇰🇷","Korea Republic":"🇰🇷",
+    "United States":"🇺🇸","USA":"🇺🇸","Canada":"🇨🇦","Japan":"🇯🇵",
     "Australia":"🇦🇺","Senegal":"🇸🇳","Ghana":"🇬🇭","Nigeria":"🇳🇬",
     "Ecuador":"🇪🇨","Uruguay":"🇺🇾","Colombia":"🇨🇴","Chile":"🇨🇱",
     "Peru":"🇵🇪","Bolivia":"🇧🇴","Venezuela":"🇻🇪","Paraguay":"🇵🇾",
     "Poland":"🇵🇱","Switzerland":"🇨🇭","Serbia":"🇷🇸","Denmark":"🇩🇰",
-    "Sweden":"🇸🇪","Norway":"🇳🇴","Turkey":"🇹🇷","Ukraine":"🇺🇦",
-    "Romania":"🇷🇴","Hungary":"🇭🇺","Slovakia":"🇸🇰","Austria":"🇦🇹",
-    "Wales":"🏴󠁧󠁢󠁷󠁬󠁳󠁿","Scotland":"🏴󠁧󠁢󠁳󠁣󠁴󠁿","Iran":"🇮🇷",
-    "Saudi Arabia":"🇸🇦","Qatar":"🇶🇦","South Africa":"🇿🇦",
-    "Cameroon":"🇨🇲","Tunisia":"🇹🇳","Ivory Coast":"🇨🇮",
-    "Egypt":"🇪🇬","Algeria":"🇩🇿","Mali":"🇲🇱","DR Congo":"🇨🇩",
-    "Cuba":"🇨🇺","Panama":"🇵🇦","Costa Rica":"🇨🇷","Honduras":"🇭🇳",
-    "Jamaica":"🇯🇲","Iraq":"🇮🇶","Indonesia":"🇮🇩","New Zealand":"🇳🇿",
-    "Slovenia":"🇸🇮","Greece":"🇬🇷","Czechia":"🇨🇿","Czech Republic":"🇨🇿",
-    "Bosnia & Herzegovina":"🇧🇦","Bosnia and Herzegovina":"🇧🇦",
-    "Israel":"🇮🇱","Guatemala":"🇬🇹","El Salvador":"🇸🇻",
-    "Trinidad and Tobago":"🇹🇹","Kazakhstan":"🇰🇿","Finland":"🇫🇮",
-    "Kenya":"🇰🇪","Uzbekistan":"🇺🇿","Haiti":"🇭🇹",
+    "Turkey":"🇹🇷","Ukraine":"🇺🇦","Romania":"🇷🇴","Hungary":"🇭🇺",
+    "Slovakia":"🇸🇰","Austria":"🇦🇹","Iran":"🇮🇷","Saudi Arabia":"🇸🇦",
+    "Qatar":"🇶🇦","Cameroon":"🇨🇲","Tunisia":"🇹🇳","Egypt":"🇪🇬",
+    "Algeria":"🇩🇿","Mali":"🇲🇱","Panama":"🇵🇦","Costa Rica":"🇨🇷",
+    "Honduras":"🇭🇳","Jamaica":"🇯🇲","Iraq":"🇮🇶","Slovenia":"🇸🇮",
+    "Greece":"🇬🇷","Indonesia":"🇮🇩","New Zealand":"🇳🇿","Wales":"🏴󠁧󠁢󠁷󠁬󠁳󠁿",
+    "Scotland":"🏴󠁧󠁢󠁳󠁣󠁴󠁿","Bosnia & Herzegovina":"🇧🇦","Cuba":"🇨🇺",
+    "Trinidad and Tobago":"🇹🇹","El Salvador":"🇸🇻","Guatemala":"🇬🇹",
+    "Haiti":"🇭🇹","DR Congo":"🇨🇩","Israel":"🇮🇱",
 }
 
-def f(name): return FLAGS.get(name, "🏳️")
+def fl(name): return FLAGS.get(name, "🏳️")
 
-def fetch_data():
-    r = requests.get(DATA_URL, timeout=10)
+# ─── STATE ────────────────────────────────────────────────────────────────────
+def load_state() -> dict:
+    if STATE_FILE.exists():
+        return json.loads(STATE_FILE.read_text())
+    return {}
+
+def save_state(state: dict):
+    STATE_FILE.write_text(json.dumps(state, indent=2))
+
+def match_state(state, mid) -> dict:
+    return state.setdefault(mid, {
+        "prematch": False,
+        "ht": False,
+        "ft": False,
+        "et_ht": False,
+        "aet": False,
+        "pen": False,
+    })
+
+# ─── ESPN DATA ────────────────────────────────────────────────────────────────
+def fetch_espn() -> list:
+    r = requests.get(ESPN_URL, headers=HEADERS, timeout=10)
     r.raise_for_status()
-    return r.json()["matches"]
+    return r.json().get("events", [])
 
-def parse_date(match):
-    """Parse tanggal match, return datetime aware WIB"""
-    raw = match.get("date", "")
-    t   = match.get("time", "")
-    if not raw:
-        return None
+def parse_event(event: dict) -> dict:
+    """Extract relevant fields from ESPN event"""
+    comp       = event["competitions"][0]
+    status     = comp["status"]
+    state      = status["type"]["state"]        # "pre", "in", "post"
+    period     = status.get("period", 0)
+    type_name  = status["type"]["name"]         # STATUS_HALFTIME, etc.
+    detail     = status["type"].get("detail", "")
+    short_det  = status["type"].get("shortDetail", "")
+    clock      = status.get("displayClock", "")
+
+    competitors = comp.get("competitors", [])
+    home = next((c for c in competitors if c["homeAway"] == "home"), competitors[0])
+    away = next((c for c in competitors if c["homeAway"] == "away"), competitors[1])
+
+    # goal details
+    def get_goals(team_id):
+        goals = []
+        for d in comp.get("details", []):
+            if d.get("type", {}).get("text", "") in ("Goal", "Penalty Goal", "Own Goal"):
+                if d.get("team", {}).get("id") == team_id:
+                    scorer = d.get("athletesInvolved", [{}])[0].get("displayName", "?")
+                    min_   = d.get("clock", {}).get("displayValue", "?")
+                    own    = "OG" if "Own" in d.get("type", {}).get("text", "") else ""
+                    goals.append(f"{scorer} {min_}'{own}")
+        return goals
+
+    home_id   = home["team"]["id"]
+    away_id   = away["team"]["id"]
+    home_name = home["team"].get("displayName", "?")
+    away_name = away["team"].get("displayName", "?")
+    home_sc   = home.get("score", "-")
+    away_sc   = away.get("score", "-")
+
+    # kickoff time
+    ko_str    = comp.get("date", event.get("date", ""))
     try:
-        # time biasanya format "13:00 UTC-6"
-        if t:
-            tz_str = t.split()[-1] if "UTC" in t else "UTC+0"
-            time_str = t.split()[0]
-            offset_h = int(tz_str.replace("UTC", "") or 0)
-            tz = timezone(timedelta(hours=offset_h))
-            dt = datetime.strptime(f"{raw} {time_str}", "%Y-%m-%d %H:%M").replace(tzinfo=tz)
-        else:
-            dt = datetime.strptime(raw, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        return dt.astimezone(WIB)
+        ko_dt = datetime.fromisoformat(ko_str.replace("Z", "+00:00"))
     except:
-        return None
+        ko_dt = None
 
-def is_done(m):
-    return bool(m.get("score") and m["score"].get("ft"))
+    # round/group info
+    season_type = comp.get("type", {}).get("abbreviation", "")
+    notes       = comp.get("notes", [])
+    round_info  = notes[0].get("headline", "") if notes else season_type
 
-def fmt_result(m):
-    h, a = m["team1"], m["team2"]
-    sc   = m["score"]["ft"]
-    dt   = parse_date(m)
-    dstr = dt.strftime("%d %b, %H:%M WIB") if dt else m.get("date","")
-    rnd  = m.get("group", m.get("round",""))
-    return f"  {f(h)} <b>{h} {sc[0]} - {sc[1]} {f(a)} {a}</b>\n  <i>📅 {dstr} · {rnd}</i>"
+    return {
+        "id":        event["id"],
+        "home":      home_name,
+        "away":      away_name,
+        "home_sc":   home_sc,
+        "away_sc":   away_sc,
+        "home_goals": get_goals(home_id),
+        "away_goals": get_goals(away_id),
+        "state":     state,         # pre, in, post
+        "period":    period,        # 1=1H, 2=2H, 3=ET1, 4=ET2, 5=PEN
+        "type_name": type_name,     # STATUS_HALFTIME, STATUS_FINAL, etc.
+        "detail":    detail,
+        "short_det": short_det,
+        "clock":     clock,
+        "ko_dt":     ko_dt,
+        "round":     round_info,
+        "is_knockout": is_knockout(round_info),
+    }
 
-def fmt_fixture(m):
-    h, a = m["team1"], m["team2"]
-    dt   = parse_date(m)
-    dstr = dt.strftime("%d %b, %H:%M WIB") if dt else m.get("date","")
-    rnd  = m.get("group", m.get("round",""))
-    return f"  {f(h)} <b>{h} vs {a} {f(a)}</b>\n  <i>📅 {dstr} · {rnd}</i>"
+def is_knockout(round_str: str) -> bool:
+    ko_keywords = ["round of", "quarter", "semi", "final", "r32", "r16", "qf", "sf"]
+    return any(k in round_str.lower() for k in ko_keywords)
 
-def send(text):
+# ─── FORMATTERS ───────────────────────────────────────────────────────────────
+def scorers_str(home, away, home_goals, away_goals) -> str:
+    lines = []
+    if home_goals:
+        lines.append(f"  ⚽ {fl(home)} " + ", ".join(home_goals))
+    if away_goals:
+        lines.append(f"  ⚽ {fl(away)} " + ", ".join(away_goals))
+    return "\n".join(lines)
+
+def notif_prematch(m: dict) -> str:
+    ko_wib = m["ko_dt"].astimezone(WIB).strftime("%H:%M WIB") if m["ko_dt"] else "?"
+    return (
+        f"🔔 <b>KICK OFF SEBENTAR LAGI</b>\n\n"
+        f"{fl(m['home'])} <b>{m['home']}</b>  vs  <b>{m['away']}</b> {fl(m['away'])}\n"
+        f"⏰ {ko_wib} · {m['round']}"
+    )
+
+def notif_ht(m: dict) -> str:
+    sc = scorers_str(m["home"], m["away"], m["home_goals"], m["away_goals"])
+    return (
+        f"⏸ <b>HALF TIME</b>\n\n"
+        f"{fl(m['home'])} <b>{m['home']} {m['home_sc']} - {m['away_sc']} {m['away']}</b> {fl(m['away'])}\n"
+        f"{sc}"
+    )
+
+def notif_ft(m: dict) -> str:
+    sc = scorers_str(m["home"], m["away"], m["home_goals"], m["away_goals"])
+    going_et = (
+        m["is_knockout"]
+        and m["home_sc"] == m["away_sc"]
+        and m["home_sc"] not in ("-", "")
+    )
+    extra = "\n➡️ <i>Imbang → lanjut Extra Time</i>" if going_et else ""
+    return (
+        f"✅ <b>FULL TIME</b>\n\n"
+        f"{fl(m['home'])} <b>{m['home']} {m['home_sc']} - {m['away_sc']} {m['away']}</b> {fl(m['away'])}\n"
+        f"{sc}{extra}"
+    )
+
+def notif_et_ht(m: dict) -> str:
+    return (
+        f"⏸ <b>EXTRA TIME — HALF TIME</b>\n\n"
+        f"{fl(m['home'])} <b>{m['home']} {m['home_sc']} - {m['away_sc']} {m['away']}</b> {fl(m['away'])}"
+    )
+
+def notif_aet(m: dict) -> str:
+    sc = scorers_str(m["home"], m["away"], m["home_goals"], m["away_goals"])
+    going_pen = m["home_sc"] == m["away_sc"]
+    extra = "\n➡️ <i>Masih imbang → Adu Penalti!</i>" if going_pen else ""
+    return (
+        f"✅ <b>AFTER EXTRA TIME</b>\n\n"
+        f"{fl(m['home'])} <b>{m['home']} {m['home_sc']} - {m['away_sc']} {m['away']}</b> {fl(m['away'])}\n"
+        f"{sc}{extra}"
+    )
+
+def notif_pen(m: dict) -> str:
+    sc = scorers_str(m["home"], m["away"], m["home_goals"], m["away_goals"])
+    return (
+        f"🏆 <b>PENALTY SHOOTOUT — FINAL</b>\n\n"
+        f"{fl(m['home'])} <b>{m['home']} {m['home_sc']} - {m['away_sc']} {m['away']}</b> {fl(m['away'])}\n"
+        f"{sc}"
+    )
+
+# ─── SEND TELEGRAM ────────────────────────────────────────────────────────────
+def send(text: str):
     r = requests.post(
         f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
         json={"chat_id": TELEGRAM_CHAT, "text": text,
               "parse_mode": "HTML", "disable_web_page_preview": True},
-        timeout=10
+        timeout=10,
     )
     r.raise_for_status()
+    print(f"✅ Sent: {text[:60]}...")
 
+# ─── SCHEDULE NOTIF (jadwal hari ini) ─────────────────────────────────────────
+def build_schedule_msg(events: list) -> str | None:
+    today   = datetime.now(WIB).strftime("%Y-%m-%d")
+    matches = []
+    for ev in events:
+        m  = parse_event(ev)
+        ko = m["ko_dt"]
+        if ko and ko.astimezone(WIB).strftime("%Y-%m-%d") == today:
+            matches.append(m)
+    if not matches:
+        return None
+    d = datetime.now(WIB).strftime("%d %b %Y")
+    lines = [f"⚽ <b>WC 2026 — HARI INI {d}</b>\n"]
+    for m in matches:
+        ko_wib = m["ko_dt"].astimezone(WIB).strftime("%H:%M WIB")
+        lines.append(
+            f"{fl(m['home'])} <b>{m['home']} vs {m['away']}</b> {fl(m['away'])}\n"
+            f"  🕐 {ko_wib} · {m['round']}\n"
+        )
+    return "\n".join(lines)
+
+# ─── MAIN LOOP ────────────────────────────────────────────────────────────────
 def main():
-    mode     = sys.argv[1] if len(sys.argv) > 1 else "--all"
-    matches  = fetch_data()
-    now      = datetime.now(WIB)
-    today    = now.date()
+    mode = sys.argv[1] if len(sys.argv) > 1 else "--auto"
+    state = load_state()
+    now   = datetime.now(UTC)
 
-    done     = [m for m in matches if is_done(m)]
-    upcoming = [m for m in matches if not is_done(m)]
-    last5    = done[-5:]
-    next5    = upcoming[:5]
+    events = fetch_espn()
+    print(f"Fetched {len(events)} events from ESPN")
 
-    lines = [f"⚽ <b>FIFA WORLD CUP 2026</b>",
-             f"<i>{now.strftime('%d %b %Y, %H:%M WIB')}</i>\n"]
-
-    if mode in ("--all", "--last5"):
-        lines.append("✅ <b>5 HASIL TERAKHIR</b>")
-        if last5:
-            for m in reversed(last5):
-                lines += [fmt_result(m), ""]
+    if mode == "--schedule":
+        msg = build_schedule_msg(events)
+        if msg:
+            send(msg)
         else:
-            lines += ["  Belum ada hasil.", ""]
+            print("No matches today")
+        return
 
-    if mode in ("--all", "--next5"):
-        lines.append("📅 <b>JADWAL BERIKUTNYA</b>")
-        if next5:
-            for m in next5:
-                lines += [fmt_fixture(m), ""]
-        else:
-            lines.append("  Tidak ada jadwal.")
+    for ev in events:
+        m   = parse_event(ev)
+        mid = m["id"]
+        ms  = match_state(state, mid)
 
-    if mode == "--today":
-        today_matches = [m for m in matches
-                         if parse_date(m) and parse_date(m).date() == today]
-        lines.append(f"📅 <b>HARI INI — {now.strftime('%d %b %Y')}</b>")
-        if today_matches:
-            for m in today_matches:
-                lines += [(fmt_result(m) if is_done(m) else fmt_fixture(m)), ""]
-        else:
-            lines.append("  Tidak ada pertandingan hari ini.")
+        print(f"  [{mid}] {m['home']} vs {m['away']} | state={m['state']} period={m['period']} type={m['type_name']}")
 
-    msg = "\n".join(lines)
-    print(msg)
-    send(msg)
-    print("✅ Sent!")
+        # ── Pre-match: 60 min sebelum KO ─────────────────────────────────────
+        if not ms["prematch"] and m["state"] == "pre" and m["ko_dt"]:
+            diff_min = (m["ko_dt"] - now).total_seconds() / 60
+            if 0 <= diff_min <= 65:
+                send(notif_prematch(m))
+                ms["prematch"] = True
+
+        # ── Half Time ─────────────────────────────────────────────────────────
+        if not ms["ht"] and m["state"] == "in" and m["period"] == 2:
+            if "STATUS_HALFTIME" in m["type_name"] or "Half Time" in m["detail"]:
+                send(notif_ht(m))
+                ms["ht"] = True
+
+        # ── Extra Time Half Time ──────────────────────────────────────────────
+        if not ms["et_ht"] and m["state"] == "in" and m["period"] == 4:
+            if "HALFTIME" in m["type_name"] or "Half" in m["detail"]:
+                send(notif_et_ht(m))
+                ms["et_ht"] = True
+
+        # ── Full Time (90 min, no ET) ─────────────────────────────────────────
+        if not ms["ft"] and m["state"] == "post" and m["period"] <= 2:
+            send(notif_ft(m))
+            ms["ft"] = True
+
+        # ── After Extra Time ──────────────────────────────────────────────────
+        if not ms["aet"] and m["state"] == "post" and m["period"] in (3, 4):
+            send(notif_aet(m))
+            ms["aet"] = True
+
+        # ── Penalty Shootout Final ────────────────────────────────────────────
+        if not ms["pen"] and m["state"] == "post" and m["period"] == 5:
+            send(notif_pen(m))
+            ms["pen"] = True
+
+    save_state(state)
+    print("State saved.")
 
 if __name__ == "__main__":
     main()
