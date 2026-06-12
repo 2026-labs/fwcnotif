@@ -150,9 +150,9 @@ def scorers_str(home, away, home_goals, away_goals) -> str:
     return "\n".join(lines)
 
 def notif_prematch(m: dict) -> str:
-    ko_wib = m["ko_dt"].astimezone(WIB).strftime("%H:%M WIB") if m["ko_dt"] else "?"
+    ko_wib = m["ko_dt"].astimezone(WIB).strftime("%d %b, %H:%M WIB") if m["ko_dt"] else "?"
     return (
-        f"🔔 <b>KICK OFF SEBENTAR LAGI</b>\n\n"
+        f"🔔 <b>NEXT MATCH</b>\n\n"
         f"{fl(m['home'])} <b>{m['home']}</b>  vs  <b>{m['away']}</b> {fl(m['away'])}\n"
         f"⏰ {ko_wib} · {m['round']}"
     )
@@ -172,7 +172,7 @@ def notif_ft(m: dict) -> str:
         and m["home_sc"] == m["away_sc"]
         and m["home_sc"] not in ("-", "")
     )
-    extra = "\n➡️ <i>Imbang → lanjut Extra Time</i>" if going_et else ""
+    extra = "\n➡️ <i>Draw → Extra Time</i>" if going_et else ""
     return (
         f"✅ <b>FULL TIME</b>\n\n"
         f"{fl(m['home'])} <b>{m['home']} {m['home_sc']} - {m['away_sc']} {m['away']}</b> {fl(m['away'])}\n"
@@ -188,7 +188,7 @@ def notif_et_ht(m: dict) -> str:
 def notif_aet(m: dict) -> str:
     sc = scorers_str(m["home"], m["away"], m["home_goals"], m["away_goals"])
     going_pen = m["home_sc"] == m["away_sc"]
-    extra = "\n➡️ <i>Masih imbang → Adu Penalti!</i>" if going_pen else ""
+    extra = "\n➡️ <i>Draw → Penalty!</i>" if going_pen else ""
     return (
         f"✅ <b>AFTER EXTRA TIME</b>\n\n"
         f"{fl(m['home'])} <b>{m['home']} {m['home_sc']} - {m['away_sc']} {m['away']}</b> {fl(m['away'])}\n"
@@ -226,7 +226,7 @@ def build_schedule_msg(events: list) -> str | None:
     if not matches:
         return None
     d = datetime.now(WIB).strftime("%d %b %Y")
-    lines = [f"⚽ <b>WC 2026 — HARI INI {d}</b>\n"]
+    lines = [f"⚽ <b>WC 2026 — TODAY {d}</b>\n"]
     for m in matches:
         ko_wib = m["ko_dt"].astimezone(WIB).strftime("%H:%M WIB")
         lines.append(
