@@ -110,5 +110,29 @@
     "et_ht": false,
     "aet": false,
     "pen": false
+  },
+  "760432": {
+    "prematch": true,
+    "ht": false,
+    "ft": false,
+    "et_ht": false,
+    "aet": false,
+    "pen": false
+  },
+  "760430": {
+    "prematch": false,
+    "ht": false,
+    "ft": false,
+    "et_ht": false,
+    "aet": false,
+    "pen": false
+  },
+  "760433": {
+    "prematch": false,
+    "ht": false,
+    "ft": false,
+    "et_ht": false,
+    "aet": false,
+    "pen": false
   }
 }
