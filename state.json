@@ -134,5 +134,45 @@
     "et_ht": false,
     "aet": false,
     "pen": false
+  },
+  "760431": {
+    "prematch": false,
+    "ht": false,
+    "ft": true,
+    "et_ht": false,
+    "aet": false,
+    "pen": false
+  },
+  "760435": {
+    "prematch": true,
+    "ht": false,
+    "ft": false,
+    "et_ht": false,
+    "aet": false,
+    "pen": false
+  },
+  "760437": {
+    "prematch": true,
+    "ht": false,
+    "ft": false,
+    "et_ht": false,
+    "aet": false,
+    "pen": false
+  },
+  "760434": {
+    "prematch": false,
+    "ht": false,
+    "ft": false,
+    "et_ht": false,
+    "aet": false,
+    "pen": false
+  },
+  "760436": {
+    "prematch": false,
+    "ht": false,
+    "ft": false,
+    "et_ht": false,
+    "aet": false,
+    "pen": false
   }
 }
