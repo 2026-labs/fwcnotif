@@ -370,7 +370,7 @@
   "760462": {
     "prematch": true,
     "ht": true,
-    "ft": false,
+    "ft": true,
     "et_ht": false,
     "aet": false,
     "pen": false
@@ -378,7 +378,7 @@
   "760463": {
     "prematch": true,
     "ht": true,
-    "ft": false,
+    "ft": true,
     "et_ht": false,
     "aet": false,
     "pen": false
