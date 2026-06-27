@@ -497,7 +497,7 @@
   },
   "760476": {
     "prematch": true,
-    "ht": false,
+    "ht": true,
     "ft": false,
     "et_ht": false,
     "aet": false,
@@ -505,7 +505,7 @@
   },
   "760477": {
     "prematch": true,
-    "ht": false,
+    "ht": true,
     "ft": false,
     "et_ht": false,
     "aet": false,
