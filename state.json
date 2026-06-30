@@ -590,5 +590,29 @@
     "et_ht": false,
     "aet": false,
     "pen": true
+  },
+  "760490": {
+    "prematch": true,
+    "ht": false,
+    "ft": false,
+    "et_ht": false,
+    "aet": false,
+    "pen": false
+  },
+  "760492": {
+    "prematch": true,
+    "ht": false,
+    "ft": false,
+    "et_ht": false,
+    "aet": false,
+    "pen": false
+  },
+  "760491": {
+    "prematch": false,
+    "ht": false,
+    "ft": false,
+    "et_ht": false,
+    "aet": false,
+    "pen": false
   }
 }
