@@ -618,7 +618,7 @@
   "760495": {
     "prematch": true,
     "ht": false,
-    "ft": false,
+    "ft": true,
     "et_ht": false,
     "aet": false,
     "pen": false
