@@ -718,5 +718,21 @@
     "et_ht": false,
     "aet": false,
     "pen": false
+  },
+  "760506": {
+    "prematch": true,
+    "ht": false,
+    "ft": false,
+    "et_ht": false,
+    "aet": false,
+    "pen": false
+  },
+  "760507": {
+    "prematch": false,
+    "ht": false,
+    "ft": false,
+    "et_ht": false,
+    "aet": false,
+    "pen": false
   }
 }
